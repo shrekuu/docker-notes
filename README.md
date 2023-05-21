@@ -1,5 +1,7 @@
 # Docker 笔记
 
+> 重新 build 时 `docker build --no-cache ...`
+
 ## 跑 8 个版本 PHP-FPM
 
 > 自己打镜像时源换来换去总有东西装不上, 干脆站在巨人肩膀上, 罢了罢了.
@@ -46,13 +48,80 @@ docker stop php-fpm55
 ## 跑 3 个版本 MySQL
 
 
-给本地建几个目录, `/var/docker-mysql-datadirs/mysql56-datadir`.
+给本地建几个目录, `/var/docker-mysqls/mysql56/datadir`.
 我是在用户目录创建好 `docker-mysql-datadirs` 再软链接到 `/var` 目录去.
 
 ```sh
-docker run -d --name mysql56 -v /var/docker-mysql-datadirs/mysql56-datadir:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=root mysql:5.6
-docker run -d --name mysql57 -v /var/docker-mysql-datadirs/mysql57-datadir:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=root mysql:5.7
-docker run -d --name mysql80 -v /var/docker-mysql-datadirs/mysql80-datadir:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=root mysql:8.0
+docker run -d --name mysql56 -v /var/docker-mysqls/mysql56/datadir:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=root mysql:5.6
+docker run -d --name mysql57 -v /var/docker-mysqls/mysql57/datadir:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=root mysql:5.7
+docker run -d --name mysql80 -p 3380:3306 -h 127.0.0.1 -v /var/docker-mysqls/mysql80/datadir:/var/lib/mysql -e MYSQL_ROOT_PASSWORD=root mysql:8.0
+```
+## 不要在 docker 里跑 nginx
+
+
+## 跑一个 jenkins
+
+先跑 dind
+
+```sh
+docker run \
+  --name jenkins-docker \
+  --rm \
+  --detach \
+  --privileged \
+  --network jenkins \
+  --network-alias docker \
+  --env DOCKER_TLS_CERTDIR=/certs \
+  --volume jenkins-docker-certs:/certs/client \
+  --volume jenkins-data:/var/jenkins_home \
+  --publish 2376:2376 \
+  docker:dind
+```
+
+再跑 jenkins
+
+```sh
+docker run \
+  --name jenkins-blueocean \
+  --rm \
+  --detach \
+  --network jenkins \
+  --env DOCKER_HOST=tcp://docker:2376 \
+  --env DOCKER_CERT_PATH=/certs/client \
+  --env DOCKER_TLS_VERIFY=1 \
+  --publish 8080:8080 \
+  --publish 50000:50000 \
+  --volume jenkins-data:/var/jenkins_home \
+  --volume jenkins-docker-certs:/certs/client:ro \
+  myjenkins-blueocean:1.1
+```
+
+取下布署密码
+
+```sh
+docker exec jenkins-docker cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+参考 [`jenkins.conf`](jenkins.conf) 在 nginx 里加个反向代理, 访问时就不写端口号了.
+
+## 跑 Gitlab
+
+.zshrc 里加一行
+
+```sh
+export GITLAB_HOME=/srv/gitlab
+```
+
+```sh
+docker run --detach \
+  --hostname gitlab.linwise.com \
+  --publish 443:443 --publish 80:80 --publish 22:22 \
+  --name gitlab \
+  --restart always \
+  --volume $GITLAB_HOME/config:/etc/gitlab \
+  --volume $GITLAB_HOME/logs:/var/log/gitlab \
+  --volume $GITLAB_HOME/data:/var/opt/gitlab \
+  gitlab/gitlab-ee:latest
 ```
 
 
